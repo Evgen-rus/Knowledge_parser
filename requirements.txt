@@ -2,4 +2,5 @@ google-api-python-client==2.97.0
 google-auth==2.23.0
 google-auth-oauthlib==1.1.0
 gspread==5.10.0
-python-slugify==8.0.4 
+python-slugify==8.0.4
+tk==0.1.0 
