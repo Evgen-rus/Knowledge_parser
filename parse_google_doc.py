@@ -3,12 +3,16 @@
 """
 import os
 import re
+import argparse
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from config import CREDENTIALS_FILE, SCOPES, DOCS_DIR, FILENAME_TEMPLATE
-from utils import slugify_filename, format_as_markdown, save_markdown, create_directories
+from config import CREDENTIALS_FILE, SCOPES, DOCS_DIR, ORIGINAL_DOCS_DIR, FILENAME_TEMPLATE
+from utils import (
+    slugify_filename, format_as_markdown, save_markdown, 
+    create_directories, save_original_and_clean, get_cleaning_stats
+)
 
 
 def authenticate_docs():
@@ -159,15 +163,17 @@ def gdoc_to_markdown(document):
     return title, content
 
 
-def parse_doc(document_id):
+def parse_doc(document_id, cleaning_level="medium", save_original=True):
     """
     Основная функция парсинга документа.
     
     Args:
         document_id (str): ID документа Google Docs.
+        cleaning_level (str): Уровень очистки документа (low, medium, high).
+        save_original (bool): Сохранять ли оригинальную версию документа.
         
     Returns:
-        str: Путь к сохраненному Markdown файлу или None в случае ошибки.
+        tuple: (Путь к очищенному файлу, статистика очистки) или (None, None) в случае ошибки.
     """
     # Создаем необходимые директории
     create_directories()
@@ -175,41 +181,62 @@ def parse_doc(document_id):
     # Аутентификация
     service = authenticate_docs()
     if not service:
-        return None
+        return None, None
     
     # Получаем документ
     document = get_document(service, document_id)
     if not document:
-        return None
+        return None, None
     
     # Преобразуем документ в Markdown
     title, content = gdoc_to_markdown(document)
     
-    # Форматируем документ в Markdown
-    markdown_content = format_as_markdown(title, content)
+    # Форматируем документ в Markdown и получаем очищенную версию
+    original_content, clean_content = format_as_markdown(title, content, cleaning_level)
     
-    # Формируем имя файла и сохраняем
+    # Получаем статистику очистки
+    stats = get_cleaning_stats(original_content, clean_content)
+    
+    # Формируем имя файла
     filename = FILENAME_TEMPLATE.format(slugify_filename(title))
-    return save_markdown(markdown_content, filename, DOCS_DIR)
+    
+    # Сохраняем файлы
+    if save_original:
+        original_path, clean_path = save_original_and_clean(original_content, clean_content, filename)
+        return clean_path, stats
+    else:
+        clean_path = save_markdown(clean_content, filename, DOCS_DIR)
+        return clean_path, stats
 
 
-def main(document_ids):
+def main(document_ids, cleaning_level="medium", save_original=True):
     """
     Точка входа для обработки списка документов.
     
     Args:
         document_ids (list): Список ID документов для обработки.
+        cleaning_level (str): Уровень очистки документа (low, medium, high).
+        save_original (bool): Сохранять ли оригинальную версию документа.
         
     Returns:
-        list: Список путей к сохраненным файлам.
+        list: Список результатов обработки документов.
     """
     results = []
     
     for doc_id in document_ids:
-        result = parse_doc(doc_id)
-        if result:
+        clean_path, stats = parse_doc(doc_id, cleaning_level, save_original)
+        if clean_path:
+            result = {
+                "document_id": doc_id,
+                "path": clean_path,
+                "stats": stats
+            }
             results.append(result)
-            print(f"Документ {doc_id} успешно преобразован и сохранен: {result}")
+            print(f"Документ {doc_id} успешно преобразован и сохранен:")
+            print(f"  Путь: {clean_path}")
+            print(f"  Размер оригинала: {stats['original_size']} символов")
+            print(f"  Размер после очистки: {stats['cleaned_size']} символов")
+            print(f"  Удалено: {stats['removed_chars']} символов ({stats['removed_percent']}%)")
         else:
             print(f"Не удалось обработать документ {doc_id}")
     
@@ -217,8 +244,20 @@ def main(document_ids):
 
 
 if __name__ == "__main__":
-    # Пример использования
-    docs_to_parse = [
-        "1QF_32LrnW-9mTy6u3FSHbguYon1nnlbqlt5hGvQ6NpY"  # Пример ID документа
-    ]
-    main(docs_to_parse) 
+    parser = argparse.ArgumentParser(description='Парсинг Google Docs и преобразование в Markdown')
+    parser.add_argument('--doc_ids', nargs='+', help='ID документов Google Docs для обработки')
+    parser.add_argument('--cleaning_level', choices=['low', 'medium', 'high'], default='medium', 
+                        help='Уровень очистки документа (low, medium, high)')
+    parser.add_argument('--no_save_original', action='store_true', help='Не сохранять оригинальную версию документа')
+    
+    args = parser.parse_args()
+    
+    if args.doc_ids:
+        doc_ids = args.doc_ids
+    else:
+        # Пример использования, если не указаны аргументы командной строки
+        doc_ids = [
+            "1QF_32LrnW-9mTy6u3FSHbguYon1nnlbqlt5hGvQ6NpY"  # Пример ID документа
+        ]
+    
+    main(doc_ids, args.cleaning_level, not args.no_save_original) 

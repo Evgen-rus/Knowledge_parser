@@ -5,6 +5,7 @@
 """
 import os
 import re
+import argparse
 import tkinter as tk
 from tkinter import filedialog
 
@@ -75,12 +76,14 @@ def determine_resource_type(url):
     return None
 
 
-def parse_links_file(file_path):
+def parse_links_file(file_path, cleaning_level="medium", save_original=True):
     """
     Парсит файл со ссылками и вызывает соответствующие парсеры.
     
     Args:
         file_path (str): Путь к файлу со ссылками.
+        cleaning_level (str): Уровень очистки документа (low, medium, high).
+        save_original (bool): Сохранять ли оригинальную версию документа.
         
     Returns:
         tuple: (список обработанных документов, список обработанных таблиц)
@@ -117,11 +120,11 @@ def parse_links_file(file_path):
     
     if doc_ids:
         print(f"Найдено {len(doc_ids)} документов Google Docs. Обработка...")
-        doc_results = parse_docs(doc_ids)
+        doc_results = parse_docs(doc_ids, cleaning_level, save_original)
     
     if sheet_ids:
         print(f"Найдено {len(sheet_ids)} таблиц Google Sheets. Обработка...")
-        sheet_results = parse_sheets(sheet_ids)
+        sheet_results = parse_sheets(sheet_ids, cleaning_level, save_original)
     
     return doc_results, sheet_results
 
@@ -131,15 +134,37 @@ def main():
     Основная функция программы. Открывает диалоговое окно выбора файла
     и запускает обработку ссылок.
     """
+    # Парсинг аргументов командной строки
+    parser = argparse.ArgumentParser(description='Парсинг ссылок на Google Docs и Google Sheets из текстового файла')
+    parser.add_argument('--file', help='Путь к файлу со ссылками (если не указан, откроется диалоговое окно)')
+    parser.add_argument('--cleaning_level', choices=['low', 'medium', 'high'], default='medium', 
+                       help='Уровень очистки документа (low, medium, high)')
+    parser.add_argument('--no_save_original', action='store_true', help='Не сохранять оригинальную версию документа')
+    
+    args = parser.parse_args()
+    
     print("Запуск парсера ссылок Knowledge Parser...")
     
-    file_path = select_file()
+    # Определяем путь к файлу
+    file_path = args.file
     if not file_path:
-        print("Выбор файла отменен.")
-        return
+        file_path = select_file()
+        if not file_path:
+            print("Выбор файла отменен.")
+            return
     
     print(f"Выбран файл: {file_path}")
-    doc_results, sheet_results = parse_links_file(file_path)
+    
+    # Выводим информацию о параметрах очистки
+    print(f"Уровень очистки: {args.cleaning_level}")
+    print(f"Сохранение оригиналов: {'Отключено' if args.no_save_original else 'Включено'}")
+    
+    # Обрабатываем файл со ссылками
+    doc_results, sheet_results = parse_links_file(
+        file_path, 
+        args.cleaning_level, 
+        not args.no_save_original
+    )
     
     # Выводим итоги обработки
     total_docs = len(doc_results)
