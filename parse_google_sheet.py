@@ -163,6 +163,6 @@ def main(sheet_ids):
 if __name__ == "__main__":
     # Пример использования
     sheets_to_parse = [
-        "1cGFr1_uNrBXP7LgYAIcnO-ywfZbvnFvK2pNY4Z3J3Z0"  # Пример ID таблицы
+        "1pEMXESx81j47G4MZef5fWXSxkVsUSvuZ6Ig4a1NHY3k"  # Пример ID таблицы
     ]
     main(sheets_to_parse) 
